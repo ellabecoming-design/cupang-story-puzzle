@@ -7,28 +7,28 @@ function show(id){screens.forEach(s=>s.hidden=s.id!==id);$('pagesBtn').hidden=id
 function stopAudio(){playAttempt++;narrationScene=-1;audio.pause();audio.currentTime=0;$('listenBtn').classList.remove('playing');$('listenBtn').setAttribute('aria-label','Listen to this page');$('listenBtn').querySelector('.label').textContent='Listen';}
 function toast(s){$('toast').textContent=s;$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,3000);}
 function isSceneComplete(i){return i>=0&&counts[i]>=SCENES[i].pieces.length;}
-function canAdvance(){return isSceneComplete(current)&&heard[current]&&!muted;}
+function canAdvance(){return isSceneComplete(current)&&heard[current];}
 function updateNext(){
  $('nextBtn').disabled=!canAdvance();
  if(!isSceneComplete(current))return;
- $('status').textContent=muted?'Turn sound on and listen to the story.':heard[current]?'Listen again, or turn the page.':'Listen to the whole story to turn the page.';
+ $('status').textContent=heard[current]?'Listen again, or turn the page.':muted?'Turn sound on and listen to the story.':'Listen to the whole story to turn the page.';
 }
 function canChooseScene(i){return heard.slice(0,i).every((h,j)=>h&&isSceneComplete(j));}
 function playAudio(resume=false){
  if(muted){updateNext();toast('Sound is off. Tap the sound button to listen.');return;}
  if(!isSceneComplete(current))return;
  const continuing=resume&&narrationScene===current&&audio.currentTime>0&&!audio.ended;
- if(!continuing){stopAudio();heard[current]=false;audio.src=SCENES[current].audio;}
+ if(!continuing){stopAudio();audio.src=SCENES[current].audio;}
  narrationScene=current;updateNext();
  const attempt=++playAttempt, scene=current;
  audio.play().then(()=>{if(attempt!==playAttempt||scene!==current)return;$('listenBtn').classList.add('playing');$('listenBtn').setAttribute('aria-label','Pause narration');$('listenBtn').querySelector('.label').textContent='Pause';}).catch(()=>{if(attempt!==playAttempt)return;updateNext();toast('Tap Listen to hear the whole story.');});
 }
 audio.onended=()=>{
  $('listenBtn').classList.remove('playing');$('listenBtn').setAttribute('aria-label','Listen to this page');$('listenBtn').querySelector('.label').textContent='Listen';
- // Only the completed page's own uninterrupted, audible narration unlocks Next.
+ // Listening completion is retained for this playthrough, including revisits and replays.
  if(narrationScene===current&&isSceneComplete(current)&&!muted&&!audio.muted&&audio.ended){heard[current]=true;updateNext();}
 };
-audio.onerror=()=>{if(audio.getAttribute('src')){if(narrationScene===current&&current>=0)heard[current]=false;updateNext();toast('The audio could not load. Tap Listen to try again.');$('listenBtn').classList.remove('playing');}};
+audio.onerror=()=>{if(audio.getAttribute('src')){updateNext();toast('The audio could not load. Tap Listen to try again.');$('listenBtn').classList.remove('playing');}};
 function chime(){if(muted)return;try{const ctx=new (window.AudioContext||window.webkitAudioContext)();[523.25,659.25,783.99].forEach((f,i)=>{const o=ctx.createOscillator(),g=ctx.createGain(),t=ctx.currentTime+i*.08;o.type='sine';o.frequency.value=f;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.06,t+.02);g.gain.exponentialRampToValueAtTime(.001,t+.25);o.connect(g).connect(ctx.destination);o.start(t);o.stop(t+.26);});setTimeout(()=>ctx.close(),700);}catch(e){}}
 function fitStage(){if($('game').hidden)return;const r=$('stageSpace').getBoundingClientRect(),ratio=2628/1856;const w=Math.max(0,Math.min(r.width-10,(r.height-10)*ratio));$('stage').style.width=w+'px';$('stage').style.height=w/ratio+'px';}
 new ResizeObserver(fitStage).observe($('stageSpace'));
@@ -69,7 +69,7 @@ $('backBtn').onclick=()=>{if(current>0)openScene(current-1);};
 $('homeBtn').onclick=$('endingHome').onclick=()=>{cancelDrag();show('welcome');};
 $('startBtn').onclick=()=>{openScene(0);if(!muted&&!isSceneComplete(0)){audio.src='assets/00.mp3';audio.play().catch(()=>{});}};
 $('againBtn').onclick=()=>{counts.fill(0);heard.fill(false);openScene(0);};
-$('soundBtn').onclick=()=>{muted=!muted;audio.muted=muted;if(muted){if(narrationScene===current&&current>=0&&!audio.ended)heard[current]=false;stopAudio();}updateNext();$('soundBtn').style.background=muted?'#f4dfdd':'';$('soundBtn').setAttribute('aria-label',muted?'Turn sound on':'Turn sound off');$('soundBtn').setAttribute('aria-pressed',String(muted));$('soundBtn').querySelector('svg').style.opacity=muted?'.4':'1';toast(muted?'Sound off':'Sound on');};
+$('soundBtn').onclick=()=>{muted=!muted;audio.muted=muted;if(muted)stopAudio();updateNext();$('soundBtn').style.background=muted?'#f4dfdd':'';$('soundBtn').setAttribute('aria-label',muted?'Turn sound on':'Turn sound off');$('soundBtn').setAttribute('aria-pressed',String(muted));$('soundBtn').querySelector('svg').style.opacity=muted?'.4':'1';toast(muted?'Sound off':'Sound on');};
 $('fullBtn').onclick=async()=>{try{if(document.fullscreenElement){await document.exitFullscreen();}else if(document.documentElement.requestFullscreen){await document.documentElement.requestFullscreen();}else{toast('Fullscreen is unavailable in this browser. Use landscape mode.');}}catch(e){toast('Fullscreen is unavailable here. Open the game in a browser tab.');}};
 document.addEventListener('fullscreenchange',()=>{$('fullBtn').setAttribute('aria-label',document.fullscreenElement?'Exit fullscreen':'Enter fullscreen');fitStage();});
 $('pagesBtn').onclick=()=>{$('pagesGrid').replaceChildren(...SCENES.map((s,i)=>{const b=document.createElement('button');b.className='page-choice'+(i===current?' current':'');const im=new Image();im.src=s.background;im.alt='';const label=document.createElement('span');label.textContent=(i+1)+'. '+s.title;b.disabled=!canChooseScene(i);if(b.disabled)b.title='Listen to the earlier scenes first';b.append(im,label);b.onclick=()=>{$('pagesDialog').close();openScene(i);};return b;}));$('pagesDialog').showModal();};
